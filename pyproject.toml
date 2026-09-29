@@ -1,0 +1,61 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "reloom"
+version = "0.1.0"
+description = "Indexed expressions and connection contracts for mathematical optimization"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = ["relindex>=0.1.0,<0.2"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Typing :: Typed",
+    "Topic :: Scientific/Engineering :: Mathematics",
+]
+
+[project.optional-dependencies]
+pyomo = ["pyomo==6.10.1"]
+
+[dependency-groups]
+dev = ["pytest>=9,<10", "ruff>=0.15,<1", "mypy>=1.19,<2", "markdown-it-py>=4,<5"]
+solver = ["highspy==1.15.1"]
+
+[tool.uv.sources]
+relindex = { git = "https://github.com/mullzhang/relindex", rev = "7ef35a66d910b389ad38b2a197765388adf2e86a" }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reloom"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests", "/examples", "/benchmarks", "/scripts", "/docs", "/.github", "/README.md", "/CONTRIBUTING.md", "/LICENSE", "/pyproject.toml", "/mise.toml", "/uv.lock"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = "--strict-markers --import-mode=importlib"
+markers = ["integration: requires the optional Pyomo dependency", "solver: requires HiGHS"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["relindex_ports_prototype"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src/reloom"]
+
+[[tool.mypy.overrides]]
+module = ["pyomo.*"]
+ignore_missing_imports = true

@@ -1,0 +1,28 @@
+[tools]
+python = "3.14.6"
+uv = "0.11.16"
+
+[tasks.setup]
+description = "Install the locked development, Pyomo, and HiGHS dependencies"
+run = "uv sync --locked --extra pyomo --group solver"
+
+[tasks.lint]
+run = ["uv run --no-sync ruff check .", "uv run --no-sync ruff format --check ."]
+
+[tasks.typecheck]
+run = "uv run --no-sync mypy"
+
+[tasks.test]
+run = "uv run --no-sync pytest"
+
+[tasks.docs]
+run = "uv run --no-sync python scripts/check_docs.py"
+
+[tasks.check]
+depends = ["lint", "typecheck", "test", "docs"]
+
+[tasks."verify:wheel"]
+run = "uv run --no-sync python scripts/verify_wheel.py"
+
+[tasks.benchmark]
+run = "uv run --no-sync python benchmarks/build.py --output build/benchmark.json"
