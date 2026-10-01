@@ -58,6 +58,66 @@ def test_values_are_delegated_to_adapter(context, value):
     assert caught.value.details["key"] == (1,)
 
 
+def test_value_validator_is_scoped_to_each_validation_pass(context, monkeypatch):
+    passes = []
+    validate = context.adapter.validate_value
+
+    def factory(model):
+        assert model is context.model
+        values = []
+        passes.append(values)
+
+        def check(value):
+            values.append(value)
+            validate(model, value)
+
+        return check
+
+    monkeypatch.setattr(context.adapter, "value_validator", factory, raising=False)
+    domain = Relation([(1,), (2,)], schema=("id",))
+    family = Indexed(domain, {(1,): 10, (2,): 20}, context)
+    family._validate()
+    assert passes == [[10, 20], [10, 20]]
+    assert passes[0] is not passes[1]
+
+
+def test_legacy_adapter_without_validator_factory_is_rechecked(context, monkeypatch):
+    assert not hasattr(context.adapter, "value_validator")
+    calls = []
+    original = context.adapter.validate_value
+
+    def validate(model, value):
+        assert model is context.model
+        calls.append(value)
+        original(model, value)
+
+    monkeypatch.setattr(context.adapter, "validate_value", validate)
+    domain = Relation([(1,), (2,)], schema=("id",))
+    family = Indexed(domain, {(1,): 10, (2,): 20}, context)
+    family._validate()
+    assert calls == [10, 20, 10, 20]
+    with pytest.raises(ContractError) as caught:
+        Indexed(domain, {(1,): 10, (2,): None}, context)
+    assert calls == [10, 20, 10, 20, 10, None]
+    assert caught.value.details["key"] == (2,)
+
+
+def test_empty_family_rechecks_model_without_validating_values(context, monkeypatch):
+    family = Indexed(Relation([], schema=("id",)), {}, context)
+
+    def reject_model(model):
+        raise ContractError("context", "model changed")
+
+    def reject_value(model, value):
+        raise AssertionError("empty family has no values")
+
+    monkeypatch.setattr(context.adapter, "validate_value", reject_value)
+    family._validate()
+    monkeypatch.setattr(context.adapter, "validate_model", reject_model)
+    with pytest.raises(ContractError, match="model changed"):
+        family._validate()
+
+
 def test_grouped_sum_retains_empty_key(context, source, targets):
     family = Indexed(source, {("F1", "W1", "P1"): 3, ("F1", "W2", "P1"): 4}, context)
     result = sum_over(family, "factory", "product", over=targets, empty="zero")
