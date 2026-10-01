@@ -1,7 +1,8 @@
 """Pyomo 6.10.1 adapter for scalar affine expressions in one ConcreteModel."""
 
 import math
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
+from functools import partial
 from typing import Any, cast
 
 import pyomo.environ as pyo
@@ -42,6 +43,18 @@ class PyomoAdapter:
             raise ContractError("context", "Expected a constructed Pyomo ConcreteModel")
 
     def validate_value(self, model: object, value: Any) -> None:
+        self._value_validator(model)(value)
+
+    def value_validator(self, model: object) -> Callable[[Any], None]:
+        # Keep custom per-value validation in subclasses and instance overrides.
+        validate = self.validate_value
+        if getattr(validate, "__func__", None) is not PyomoAdapter.validate_value:
+            return partial(validate, model)
+        return self._value_validator(model)
+
+    def _value_validator(self, model: object) -> Callable[[Any], None]:
+        """Create a fresh walker for one validation pass, without caching results."""
+
         # The walker checks named expressions as well as variables/parameters.
         # Its degree deliberately treats fixed variables as variables: unfixing
         # a variable must not turn an accepted affine expression into a product.
@@ -86,12 +99,17 @@ class PyomoAdapter:
                         return degrees[0]
             raise ContractError("expression", "Only affine expressions are supported")
 
-        try:
-            StreamBasedExpressionVisitor(enterNode=enter, exitNode=leave).walk_expression(value)
-        except ContractError:
-            raise
-        except (TypeError, ValueError, ArithmeticError) as error:
-            raise ContractError("expression", f"Invalid numeric expression: {error}") from error
+        walker = StreamBasedExpressionVisitor(enterNode=enter, exitNode=leave)
+
+        def validate(value: Any) -> None:
+            try:
+                walker.walk_expression(value)
+            except ContractError:
+                raise
+            except (TypeError, ValueError, ArithmeticError) as error:
+                raise ContractError("expression", f"Invalid numeric expression: {error}") from error
+
+        return validate
 
     def sum_terms(self, terms: Iterable[Any]) -> Any:
         return pyo.quicksum(terms)

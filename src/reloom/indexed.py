@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
+from functools import partial
 from types import MappingProxyType
 from typing import Literal
 
@@ -64,9 +65,17 @@ class Indexed[T]:
 
     def _validate(self) -> None:
         self.context.adapter.validate_model(self.context.model)
+        # The optional factory scopes reusable backend state to this pass.
+        # Adapters implementing only validate_value retain the original contract.
+        factory = getattr(self.context.adapter, "value_validator", None)
+        validate_value: Callable[[T], None]
+        if factory is None:
+            validate_value = partial(self.context.adapter.validate_value, self.context.model)
+        else:
+            validate_value = factory(self.context.model)
         for key, value in self.values.items():
             try:
-                self.context.adapter.validate_value(self.context.model, value)
+                validate_value(value)
             except ContractError as error:
                 details = dict(error.details)
                 details.update(key=key, schema=self.domain.schema)
